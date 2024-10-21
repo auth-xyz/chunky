@@ -1,7 +1,7 @@
 -----
 
 <p align="center">
-	![chunky][logo]
+	<img width="200" src="https://github.com/auth-xyz/assets/blob/main/logos/chunky.png?raw=true" alt="chunky logo">
 </p>
 
 -----
