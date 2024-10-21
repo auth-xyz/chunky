@@ -17,6 +17,9 @@ logo here
 - `How is it useful?`:
 	It depends on your usecase, if you're just trying to output files, `chunky` isn't your tool. It's made to be used with large files, so it's pretty much useless with small files.
 
+- `What are chunks?`:
+    Chunks, as its definition states, is a "substatial amount" of what? Lines. The default is `1000` lines per chunk, but you can change that with the `--size` argument as shown in the usage.
+
 - `Why?`:
     why not?
 
