@@ -47,5 +47,13 @@ install: $(EXEC)
 uninstall:
 	rm -f $(INSTALL_PATH)/chunky
 
-.PHONY: all create_dirs clean check dist distcheck install uninstall
+nixinstall:
+	nix-build
+	nix profile install ./result 
+	@echo "successfully installed chunky"
+
+nixclean:
+	rm result 
+
+.PHONY: all create_dirs clean check dist distcheck install uninstall nixinstall
 

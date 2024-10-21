@@ -2,4 +2,4 @@ dist/
 chunky
 .direnv/
 .envrc
-default.nix
+shell.nix
