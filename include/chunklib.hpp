@@ -6,88 +6,115 @@
 #include <string>
 #include <vector>
 #include <stdexcept>
+#include <ncurses.h>
 
 class ChunkLib {
 public:
-    // Constructor that accepts the file path
-    ChunkLib(const std::string& filePath) : filePath(filePath) {
+    ChunkLib(const std::string& filePath) : filePath(filePath), chunkCounter(0), currentLineOffset(0) {
         fileStream.open(filePath);
-
         if (!fileStream.is_open()) {
             throw std::runtime_error("Error: Could not open file " + filePath);
         }
+        initscr();
+        cbreak();
+        noecho();
+        keypad(stdscr, TRUE);
+        clear();
     }
 
-    // Destructor for cleanup
     ~ChunkLib() {
-        cleanup();
+        if (fileStream.is_open()) {
+            fileStream.close();
+        }
+        endwin();
     }
 
-    // Overload 1: Process file with chunk size as a size_t
     void processFile(size_t chunkSize) {
         processFileInternal(chunkSize);
     }
 
-    // Overload 2: Process file with chunk size as a string
     void processFile(const std::string& chunkSizeStr) {
-        size_t chunkSize = convertToSizeT(chunkSizeStr);
-        processFileInternal(chunkSize);
+        processFileInternal(convertToSizeT(chunkSizeStr));
     }
 
 private:
-    std::ifstream fileStream;  // Stream for reading the file
-    std::string filePath;      // Store the file path
+    std::ifstream fileStream;
+    std::string filePath;
+    size_t chunkCounter;
+    size_t currentLineOffset;
+    std::vector<std::vector<std::string>> chunks;
 
-    // Common internal function for processing the file in chunks
     void processFileInternal(size_t chunkSize) {
         while (fileStream.good()) {
             auto chunk = readChunk(chunkSize);
-
-            if (chunk.empty()) {
-                break;
-            }
-
-            outputChunk(chunk);
+            if (chunk.empty()) break;
+            chunks.push_back(std::move(chunk));
+            ++chunkCounter;
         }
+        displayChunks();
     }
 
-    // Helper function to read a chunk of X lines
     std::vector<std::string> readChunk(size_t chunkSize) {
         std::vector<std::string> chunk;
+        chunk.reserve(chunkSize);
         std::string line;
-
-        // Read up to chunkSize lines from the file
         for (size_t i = 0; i < chunkSize && std::getline(fileStream, line); ++i) {
-            chunk.push_back(line);
+            chunk.push_back(std::move(line));
         }
-
         return chunk;
     }
 
-    // Output or process the chunk (for now, just printing it to console)
-    void outputChunk(const std::vector<std::string>& chunk) {
-        for (const auto& line : chunk) {
-            std::cout << line << std::endl;
+    void displayChunks() {
+        int ch, maxY, maxX;
+        size_t chunkIndex = 0;
+        currentLineOffset = 0;
+        getmaxyx(stdscr, maxY, maxX);
+
+        while (true) {
+            clear();
+            if (chunkIndex < chunks.size()) {
+                displayChunk(chunkIndex, maxY, maxX);
+            }
+            refresh();
+            ch = getch();
+
+            if (ch == KEY_LEFT && chunkIndex > 0) {
+                chunkIndex--;
+                currentLineOffset = 0;
+            } else if (ch == KEY_RIGHT && chunkIndex < chunks.size() - 1) {
+                chunkIndex++;
+                currentLineOffset = 0;
+            } else if (ch == KEY_UP && currentLineOffset > 0) {
+                currentLineOffset--;
+            } else if (ch == KEY_DOWN && currentLineOffset + maxY - 2 < chunks[chunkIndex].size()) {
+                currentLineOffset++;
+            } else if (ch == 'q') {
+                break;
+            }
         }
     }
 
-    // Cleanup function to close the file and release resources
-    void cleanup() {
-        if (fileStream.is_open()) {
-            fileStream.close();
+    void displayChunk(size_t chunkIndex, int maxY, int maxX) {
+        mvprintw(0, 0, "--- Start of Chunk %lu ---", chunkIndex + 1);
+
+        size_t chunkSize = chunks[chunkIndex].size();
+        size_t linesToDisplay = std::min(static_cast<size_t>(maxY - 2), chunkSize - currentLineOffset);
+
+        for (size_t i = 0; i < linesToDisplay; ++i) {
+            mvprintw(i + 1, 0, "%s", chunks[chunkIndex][currentLineOffset + i].c_str());
         }
+
+        mvprintw(maxY - 1, 0, "--- End of Chunk %lu (Press 'q' to quit) ---", chunkIndex + 1);
     }
 
-    // Helper function to convert a string to size_t
     size_t convertToSizeT(const std::string& str) {
+        size_t chunkSize;
         try {
-            size_t chunkSize = std::stoull(str);  // Convert string to size_t
-            return chunkSize;
-        } catch (const std::invalid_argument& e) {
-            throw std::runtime_error("Error: Invalid chunk size string '" + str + "'");
-        } catch (const std::out_of_range& e) {
-            throw std::runtime_error("Error: Chunk size value out of range");
+            chunkSize = std::stoull(str);
+        } catch (...) {
+            throw std::runtime_error("Error: Invalid chunk size");
         }
+        return chunkSize;
     }
 };
 
