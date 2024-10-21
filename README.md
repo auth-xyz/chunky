@@ -1,6 +1,6 @@
 -----
 
-logo here
+![chunky][logo]
 
 -----
 
@@ -64,3 +64,6 @@ Arguments:
 
 If you think my code is shit, it's because it most likely is, and if you have any advice for me on how to improve my code, please reach out on discord <actually.auth>, or create an issue on this repo.
 
+
+
+[logo]: https://github.com/auth-xyz/assets/blob/main/logos/chunky.png?raw=true
