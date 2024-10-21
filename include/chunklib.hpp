@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <ncurses.h>
 #include <regex>
+#include <sstream>  // For parsing chunk number input
 
 class ChunkLib {
 public:
@@ -34,11 +35,13 @@ public:
   }
 
   void processFile(size_t chunkSize) {
-    processFileInternal(chunkSize);
+    chunkSizeLimit = chunkSize;
+    displayChunks();
   }
 
   void processFile(const std::string& chunkSizeStr) {
-    processFileInternal(convertToSizeT(chunkSizeStr));
+    chunkSizeLimit = convertToSizeT(chunkSizeStr);
+    displayChunks();
   }
 
 private:
@@ -50,24 +53,17 @@ private:
   std::string lastSearchPattern;
   size_t lastFoundChunkIndex;
   size_t lastFoundLineOffset;
-  std::vector<std::vector<std::string>> chunks;
+  size_t chunkSizeLimit;
 
-  void processFileInternal(size_t chunkSize) {
-    while (fileStream.good()) {
-      auto chunk = readChunk(chunkSize);
-      if (chunk.empty()) break;
-      chunks.push_back(std::move(chunk));
-      ++chunkCounter;
-    }
-    displayChunks();
-  }
+  // Lazy-loaded chunk
+  std::vector<std::string> currentChunk;
 
   std::vector<std::string> readChunk(size_t chunkSize) {
     std::vector<std::string> chunk;
-    chunk.reserve(chunkSize);
+    chunk.reserve(chunkSize);  // Optimize memory allocation
     std::string line;
     for (size_t i = 0; i < chunkSize && std::getline(fileStream, line); ++i) {
-      chunk.push_back(std::move(line));
+      chunk.push_back(std::move(line));  // Move instead of copy
     }
     return chunk;
   }
@@ -80,7 +76,11 @@ private:
 
     while (true) {
       clear();
-      if (chunkIndex < chunks.size()) {
+      fileStream.clear();  // Reset stream state to allow seeking
+      fileStream.seekg(chunkIndex * chunkSizeLimit * sizeof(std::string));  // Seek to the start of the chunk
+      currentChunk = readChunk(chunkSizeLimit);  // Read current chunk
+
+      if (!currentChunk.empty()) {
         displayChunk(chunkIndex, maxY, maxX);
       }
       refresh();
@@ -89,21 +89,23 @@ private:
       if (ch == KEY_LEFT && chunkIndex > 0) {
         chunkIndex--;
         currentLineOffset = 0;
-      } else if (ch == KEY_RIGHT && chunkIndex < chunks.size() - 1) {
+      } else if (ch == KEY_RIGHT && !currentChunk.empty()) {
         chunkIndex++;
         currentLineOffset = 0;
       } else if (ch == KEY_UP && currentLineOffset > 0) {
         currentLineOffset--;
-      } else if (ch == KEY_DOWN && currentLineOffset + maxY - 2 < chunks[chunkIndex].size()) {
+      } else if (ch == KEY_DOWN && currentLineOffset + maxY - 2 < currentChunk.size()) {
         currentLineOffset++;
       } else if (ch == KEY_PPAGE && currentLineOffset >= pageScrollAmount) {
         currentLineOffset -= pageScrollAmount;
-      } else if (ch == KEY_NPAGE && currentLineOffset + maxY + pageScrollAmount - 2 < chunks[chunkIndex].size()) {
+      } else if (ch == KEY_NPAGE && currentLineOffset + maxY + pageScrollAmount - 2 < currentChunk.size()) {
         currentLineOffset += pageScrollAmount;
       } else if (ch == '/') {
         searchRegex(chunkIndex, maxY, maxX);
       } else if (ch == 'n') {
         findNextRegex(chunkIndex, maxY, maxX);
+      } else if (ch == '?') {
+        jumpToChunk(chunkIndex, maxY, maxX);
       } else if (ch == 'q') {
         break;
       }
@@ -113,11 +115,11 @@ private:
   void displayChunk(size_t chunkIndex, int maxY, int maxX) {
     mvprintw(0, 0, "--- Start of Chunk %lu ---", chunkIndex + 1);
 
-    size_t chunkSize = chunks[chunkIndex].size();
+    size_t chunkSize = currentChunk.size();
     size_t linesToDisplay = std::min(static_cast<size_t>(maxY - 2), chunkSize - currentLineOffset);
 
     for (size_t i = 0; i < linesToDisplay; ++i) {
-      const std::string& line = chunks[chunkIndex][currentLineOffset + i];
+      const std::string& line = currentChunk[currentLineOffset + i];
       if (!lastSearchPattern.empty() && std::regex_search(line, std::regex(lastSearchPattern))) {
         highlightSearch(line, lastSearchPattern, i + 1);
       } else {
@@ -126,6 +128,29 @@ private:
     }
 
     mvprintw(maxY - 1, 0, "--- End of Chunk %lu (Press 'q' to quit) ---", chunkIndex + 1);
+  }
+
+  void jumpToChunk(size_t& chunkIndex, int maxY, int maxX) {
+    echo();
+    char chunkNumberStr[10];
+    mvprintw(maxY - 1, 0, "Enter chunk number: ");
+    getstr(chunkNumberStr);
+    noecho();
+
+    size_t chunkNumber;
+    try {
+      chunkNumber = std::stoull(chunkNumberStr) - 1;  // Convert input and adjust for 0-based indexing
+      if (chunkNumber >= 0) {
+        chunkIndex = chunkNumber;
+        currentLineOffset = 0;  // Reset line offset when jumping to a chunk
+      } else {
+        mvprintw(maxY - 1, 0, "Invalid chunk number. Press any key to continue.");
+        getch();
+      }
+    } catch (...) {
+      mvprintw(maxY - 1, 0, "Invalid chunk number. Press any key to continue.");
+      getch();
+    }
   }
 
   size_t convertToSizeT(const std::string& str) {
@@ -152,34 +177,49 @@ private:
     findNextRegex(chunkIndex, maxY, maxX);
   }
 
-  void findNextRegex(size_t& chunkIndex, int maxY, int maxX) {
+void findNextRegex(size_t& chunkIndex, int maxY, int maxX) {
     if (lastSearchPattern.empty()) {
-      mvprintw(maxY - 1, 0, "No previous search pattern. Press any key to continue.");
-      getch();
-      return;
+        mvprintw(maxY - 1, 0, "No previous search pattern. Press any key to continue.");
+        getch();
+        return;
     }
 
     std::regex pattern(lastSearchPattern);
     bool found = false;
+    
+    // Start searching from the last found position
+    size_t i = lastFoundChunkIndex;
 
-    for (size_t i = lastFoundChunkIndex; i < chunks.size() && !found; ++i) {
-      for (size_t j = (i == lastFoundChunkIndex) ? lastFoundLineOffset + 1 : 0; j < chunks[i].size(); ++j) {
-        if (std::regex_search(chunks[i][j], pattern)) {
-          chunkIndex = i;
-          currentLineOffset = j;
-          lastFoundChunkIndex = i;
-          lastFoundLineOffset = j;
-          found = true;
-          break;
+    while (!found && fileStream.good()) {
+        // Load the current chunk lazily
+        fileStream.clear();  // Clear any error state
+        fileStream.seekg(i * chunkSizeLimit * sizeof(std::string));  // Seek to the start of the chunk
+        currentChunk = readChunk(chunkSizeLimit);
+
+        if (currentChunk.empty()) {
+            break;  // No more data to read
         }
-      }
+
+        // Search the current chunk
+        for (size_t j = (i == lastFoundChunkIndex) ? lastFoundLineOffset + 1 : 0; j < currentChunk.size(); ++j) {
+            if (std::regex_search(currentChunk[j], pattern)) {
+                chunkIndex = i;
+                currentLineOffset = j;
+                lastFoundChunkIndex = i;
+                lastFoundLineOffset = j;
+                found = true;
+                break;
+            }
+        }
+
+        i++;  // Move to the next chunk if not found
     }
 
     if (!found) {
-      mvprintw(maxY - 1, 0, "Pattern not found. Press any key to continue.");
-      getch();
+        mvprintw(maxY - 1, 0, "Pattern not found. Press any key to continue.");
+        getch();
     }
-  }
+}
 
   void highlightSearch(const std::string& line, const std::string& pattern, int y) {
     std::regex regexPattern(pattern);
@@ -211,7 +251,8 @@ private:
 
     mvprintw(y, x, "%s", remainingLine.c_str());
   }
+
 };
 
-#endif 
+#endif
 
