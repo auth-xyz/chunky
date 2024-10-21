@@ -11,6 +11,9 @@ int main(int argc, char* argv[])
 
   cli.add_argument("file", "f", true, "file");
   cli.add_argument("size", "s", false, "chunk size");
+  cli.add_flag("start", "S", "the output will start on the first chunk");
+  cli.add_flag("middle", "M", "the output will start on the middle chunk");
+  cli.add_flag("last", "L", "the output will start on the last chunk");
   cli.parse(argc,argv);
 
   try {
