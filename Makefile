@@ -8,6 +8,7 @@ BUILD = dist/compiled
 DIST = dist/build
 
 EXEC = $(DIST)/chunky
+INSTALL_PATH = /usr/bin
 
 SRCS := $(wildcard $(SRC_DIR)/*.cpp)
 OBJS := $(patsubst $(SRC_DIR)/%.cpp, $(BUILD)/%.o, $(SRCS))
@@ -39,4 +40,12 @@ distcheck: dist
 	@cd /tmp/nrpm_distcheck && $(MAKE) && $(MAKE) check
 	@rm -rf /tmp/nrpm_distcheck
 	@echo "Distcheck complete: Distribution builds and passes check successfully."
+
+install: $(EXEC)
+	install -m 755 $(EXEC) $(INSTALL_PATH)
+
+uninstall:
+	rm -f $(INSTALL_PATH)/chunky
+
+.PHONY: all create_dirs clean check dist distcheck install uninstall
 
