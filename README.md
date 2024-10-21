@@ -1,6 +1,8 @@
 -----
 
-![chunky][logo]
+<p align="center">
+	![chunky][logo]
+</p>
 
 -----
 
