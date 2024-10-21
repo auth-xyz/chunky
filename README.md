@@ -5,6 +5,7 @@ logo here
 -----
 
 ### chunky
+**NOTE: THIS PROJECT HAS NOTHING TO DO WITH [Chunky](https://github.com/chunky-dev/chunky)**
 
 **chunky** is a tool I wrote to assist a friend on an issue he was having, we both needed a way to read giant log files in a way that wouldn't lag the whole computer or crash it for that case. So I wrote chunky.
 
