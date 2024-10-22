@@ -1,10 +1,13 @@
 -----
 
-logo here
+<p align="center">
+	<img width="350" src="https://github.com/auth-xyz/assets/blob/main/logos/chunky.png?raw=true" alt="chunky logo">
+</p>
 
 -----
 
 ### chunky
+**NOTE: THIS PROJECT HAS NOTHING TO DO WITH [Chunky](https://github.com/chunky-dev/chunky)**
 
 **chunky** is a tool I wrote to assist a friend on an issue he was having, we both needed a way to read giant log files in a way that wouldn't lag the whole computer or crash it for that case. So I wrote chunky.
 
@@ -16,6 +19,9 @@ logo here
 
 - `How is it useful?`:
 	It depends on your usecase, if you're just trying to output files, `chunky` isn't your tool. It's made to be used with large files, so it's pretty much useless with small files.
+
+- `What are chunks?`:
+    Chunks, as its definition states, is a "substatial amount" of what? Lines. The default is `1000` lines per chunk, but you can change that with the `--size` argument as shown in the usage.
 
 - `Why?`:
     why not?
@@ -60,3 +66,6 @@ Arguments:
 
 If you think my code is shit, it's because it most likely is, and if you have any advice for me on how to improve my code, please reach out on discord <actually.auth>, or create an issue on this repo.
 
+
+
+[logo]: https://github.com/auth-xyz/assets/blob/main/logos/chunky.png?raw=true
