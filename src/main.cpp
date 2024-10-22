@@ -1,23 +1,23 @@
+#include "../include/chunkystatic.hpp"
+#include "../include/chunkylive.hpp"
 #include "../include/clicky.hpp"
-#include "../include/chunklib.hpp"
 
 #include <string>
 
 int main(int argc, char* argv[])
 {
   clicky cli;
+  size_t chunkSize = 1000;
 
-  size_t size = 1000;
-
-  cli.add_argument("file", "f", true, "file");
+  cli.add_argument("file", "f", false, "file");
   cli.add_argument("size", "s", false, "chunk size");
   cli.parse(argc,argv);
 
   try {
     if(!cli.argument("file").empty())
     {
-      ChunkLib chunky(cli.argument("file"));
-      chunky.processFile(size);
+      ChunkyStatic chunky(cli.argument("file"));
+      chunky.processFile(chunkSize);
       
 
       if(!cli.argument("size").empty())
