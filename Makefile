@@ -55,5 +55,9 @@ nixinstall:
 nixclean:
 	rm result 
 
+reset:
+	$(MAKE) clean
+	$(MAKE)
+
 .PHONY: all create_dirs clean check dist distcheck install uninstall nixinstall
 

@@ -8,23 +8,18 @@
 #include <stdexcept>
 #include <ncurses.h>
 #include <regex>
-#include <sstream>  
+#include <sstream>
+#include <limits>
 
 class ChunkyStatic {
 public:
   ChunkyStatic(const std::string& filePath, size_t pageScrollAmount = 10)
-  : filePath(filePath), chunkCounter(0), currentLineOffset(0), pageScrollAmount(pageScrollAmount), lastSearchPattern(""), lastFoundChunkIndex(0), lastFoundLineOffset(0) {
+  : filePath(filePath), pageScrollAmount(pageScrollAmount), chunkCounter(0), currentLineOffset(0) {
     fileStream.open(filePath);
     if (!fileStream.is_open()) {
       throw std::runtime_error("Error: Could not open file " + filePath);
     }
-    initscr();
-    start_color();
-    init_pair(1, COLOR_BLACK, COLOR_YELLOW); 
-    cbreak();
-    noecho();
-    keypad(stdscr, TRUE);
-    clear();
+    initializeNcurses();
   }
 
   ~ChunkyStatic() {
@@ -40,7 +35,7 @@ public:
   }
 
   void processFile(const std::string& chunkSizeStr) {
-    chunkSizeLimit = convertToSizeT(chunkSizeStr);
+    chunkSizeLimit = stringToSizeT(chunkSizeStr);
     displayChunks();
   }
 
@@ -50,20 +45,28 @@ private:
   size_t chunkCounter;
   size_t currentLineOffset;
   size_t pageScrollAmount;
-  std::string lastSearchPattern;
-  size_t lastFoundChunkIndex;
-  size_t lastFoundLineOffset;
   size_t chunkSizeLimit;
 
-
   std::vector<std::string> currentChunk;
+  std::string lastSearchPattern;
+  size_t lastFoundLineOffset = 0;
+
+  void initializeNcurses() {
+    initscr();
+    start_color();
+    init_pair(1, COLOR_BLACK, COLOR_YELLOW);
+    cbreak();
+    noecho();
+    keypad(stdscr, TRUE);
+    clear();
+  }
 
   std::vector<std::string> readChunk(size_t chunkSize) {
     std::vector<std::string> chunk;
-    chunk.reserve(chunkSize);  
+    chunk.reserve(chunkSize);
     std::string line;
-    for (size_t i = 0; i < chunkSize && std::getline(fileStream, line); ++i) {
-      chunk.push_back(std::move(line));  
+    while (chunk.size() < chunkSize && std::getline(fileStream, line)) {
+      chunk.push_back(std::move(line));
     }
     return chunk;
   }
@@ -75,10 +78,9 @@ private:
     getmaxyx(stdscr, maxY, maxX);
 
     while (true) {
-      clear();
-      fileStream.clear();  
-      fileStream.seekg(chunkIndex * chunkSizeLimit * sizeof(std::string));  
-      currentChunk = readChunk(chunkSizeLimit);  
+      fileStream.clear();
+      fileStream.seekg(chunkIndex * chunkSizeLimit, std::ios::beg);
+      currentChunk = readChunk(chunkSizeLimit);
 
       if (!currentChunk.empty()) {
         displayChunk(chunkIndex, maxY, maxX);
@@ -86,37 +88,21 @@ private:
       refresh();
       ch = getch();
 
-      if (ch == KEY_LEFT && chunkIndex > 0) {
-        chunkIndex--;
-        currentLineOffset = 0;
-      } else if (ch == KEY_RIGHT && !currentChunk.empty()) {
-        chunkIndex++;
-        currentLineOffset = 0;
-      } else if (ch == KEY_UP && currentLineOffset > 0) {
-        currentLineOffset--;
-      } else if (ch == KEY_DOWN && currentLineOffset + maxY - 2 < currentChunk.size()) {
-        currentLineOffset++;
-      } else if (ch == KEY_PPAGE && currentLineOffset >= pageScrollAmount) {
-        currentLineOffset -= pageScrollAmount;
-      } else if (ch == KEY_NPAGE && currentLineOffset + maxY + pageScrollAmount - 2 < currentChunk.size()) {
-        currentLineOffset += pageScrollAmount;
-      } else if (ch == '/') {
-        searchRegex(chunkIndex, maxY, maxX);
-      } else if (ch == 'n') {
-        findNextRegex(chunkIndex, maxY, maxX);
-      } else if (ch == '?') {
-        jumpToChunk(chunkIndex, maxY, maxX);
-      } else if (ch == 'q') {
-        break;
-      }
+      handleUserInput(ch, chunkIndex, maxY, maxX);
+      if (ch == 'q') break;
     }
   }
 
   void displayChunk(size_t chunkIndex, int maxY, int maxX) {
+    clear();
     mvprintw(0, 0, "--- Start of Chunk %lu ---", chunkIndex + 1);
 
-    size_t chunkSize = currentChunk.size();
-    size_t linesToDisplay = std::min(static_cast<size_t>(maxY - 2), chunkSize - currentLineOffset);
+
+    if (currentLineOffset >= currentChunk.size()) {
+      currentLineOffset = 0;  
+    }
+
+    size_t linesToDisplay = std::min(static_cast<size_t>(maxY - 2), currentChunk.size() - currentLineOffset);
 
     for (size_t i = 0; i < linesToDisplay; ++i) {
       const std::string& line = currentChunk[currentLineOffset + i];
@@ -127,7 +113,34 @@ private:
       }
     }
 
-    mvprintw(maxY - 1, 0, "--- End of Chunk %lu (Press 'q' to quit) ---", chunkIndex + 1);
+    size_t endChunkLine = linesToDisplay + 1;
+    if (endChunkLine < maxY - 1) {
+      mvprintw(endChunkLine, 0, "--- End of Chunk %lu ---", chunkIndex + 1);
+    }
+  }
+
+  void handleUserInput(int ch, size_t& chunkIndex, int maxY, int maxX) {
+    if (ch == KEY_LEFT && chunkIndex > 0) {
+      chunkIndex--;
+      currentLineOffset = 0;
+    } else if (ch == KEY_RIGHT && !currentChunk.empty()) {
+      chunkIndex++;
+      currentLineOffset = 0;
+    } else if (ch == KEY_UP && currentLineOffset > 0) {
+      currentLineOffset--;
+    } else if (ch == KEY_DOWN && currentLineOffset + maxY - 2 < currentChunk.size()) {
+      currentLineOffset++;
+    } else if (ch == KEY_PPAGE && currentLineOffset >= pageScrollAmount) {
+      currentLineOffset -= pageScrollAmount;
+    } else if (ch == KEY_NPAGE && currentLineOffset + maxY - 2 < currentChunk.size()) {
+      currentLineOffset += pageScrollAmount;
+    } else if (ch == '/') {
+      searchRegex(chunkIndex, maxY);
+    } else if (ch == 'n') {
+      findNextRegex(chunkIndex, maxY);
+    } else if (ch == '?') {
+      jumpToChunk(chunkIndex, maxY, maxX);
+    }
   }
 
   void jumpToChunk(size_t& chunkIndex, int maxY, int maxX) {
@@ -140,7 +153,15 @@ private:
     size_t chunkNumber;
     try {
       chunkNumber = std::stoull(chunkNumberStr) - 1;  
-      if (chunkNumber >= 0) {
+
+
+      fileStream.clear(); 
+      fileStream.seekg(0, std::ios::end); 
+      size_t fileSize = fileStream.tellg(); 
+      size_t totalChunks = fileSize / (chunkSizeLimit * sizeof(std::string));
+
+
+      if (chunkNumber <= totalChunks) {
         chunkIndex = chunkNumber;
         currentLineOffset = 0;  
       } else {
@@ -153,31 +174,27 @@ private:
     }
   }
 
-  size_t convertToSizeT(const std::string& str) {
-    size_t chunkSize;
+  size_t stringToSizeT(const std::string& str) {
     try {
-      chunkSize = std::stoull(str);
+      return std::stoull(str);
     } catch (...) {
       throw std::runtime_error("Error: Invalid chunk size");
     }
-    return chunkSize;
   }
 
-  void searchRegex(size_t& chunkIndex, int maxY, int maxX) {
-    echo(); 
+  void searchRegex(size_t& chunkIndex, int maxY) {
+    echo();
     char searchPattern[256];
     mvprintw(maxY - 1, 0, "Enter regex pattern: ");
-    getstr(searchPattern); 
-    noecho(); 
+    getstr(searchPattern);
+    noecho();
 
     lastSearchPattern = searchPattern;
-    lastFoundChunkIndex = chunkIndex;
     lastFoundLineOffset = currentLineOffset;
-
-    findNextRegex(chunkIndex, maxY, maxX);
+    findNextRegex(chunkIndex, maxY);
   }
 
-  void findNextRegex(size_t& chunkIndex, int maxY, int maxX) {
+  void findNextRegex(size_t& chunkIndex, int maxY) {
     if (lastSearchPattern.empty()) {
       mvprintw(maxY - 1, 0, "No previous search pattern. Press any key to continue.");
       getch();
@@ -187,32 +204,17 @@ private:
     std::regex pattern(lastSearchPattern);
     bool found = false;
 
-
-    size_t i = lastFoundChunkIndex;
-
     while (!found && fileStream.good()) {
-
-      fileStream.clear();  
-      fileStream.seekg(i * chunkSizeLimit * sizeof(std::string));  
       currentChunk = readChunk(chunkSizeLimit);
-
-      if (currentChunk.empty()) {
-        break;  
-      }
-
-
-      for (size_t j = (i == lastFoundChunkIndex) ? lastFoundLineOffset + 1 : 0; j < currentChunk.size(); ++j) {
+      for (size_t j = lastFoundLineOffset + 1; j < currentChunk.size(); ++j) {
         if (std::regex_search(currentChunk[j], pattern)) {
-          chunkIndex = i;
+          chunkIndex++;
           currentLineOffset = j;
-          lastFoundChunkIndex = i;
-          lastFoundLineOffset = j;
           found = true;
           break;
         }
       }
-
-      i++;  
+      lastFoundLineOffset = 0;
     }
 
     if (!found) {
@@ -234,20 +236,24 @@ private:
       size_t startPos = match.position();
       size_t matchLen = match.length();
 
+      if (startPos > remainingLine.size()) {
+        break; 
+      }
 
       mvprintw(y, x, "%s", remainingLine.substr(0, startPos).c_str());
       x += startPos;
 
+      if (startPos + matchLen > remainingLine.size()) {
+        matchLen = remainingLine.size() - startPos;
+      }
 
       attron(COLOR_PAIR(1));
       mvprintw(y, x, "%s", remainingLine.substr(startPos, matchLen).c_str());
       attroff(COLOR_PAIR(1));
       x += matchLen;
-
       remainingLine = remainingLine.substr(startPos + matchLen);
       iter++;
     }
-
 
     mvprintw(y, x, "%s", remainingLine.c_str());
   }

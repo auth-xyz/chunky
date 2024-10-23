@@ -1,5 +1,4 @@
 #include "../include/chunkystatic.hpp"
-#include "../include/chunkylive.hpp"
 #include "../include/clicky.hpp"
 
 #include <string>
@@ -7,7 +6,7 @@
 int main(int argc, char* argv[])
 {
   clicky cli;
-  size_t chunkSize = 1000;
+  size_t chunkSize = 1100;
 
   cli.add_argument("file", "f", false, "file");
   cli.add_argument("size", "s", false, "chunk size");
