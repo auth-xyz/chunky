@@ -1,63 +1,29 @@
 CXX = g++
-CXXFLAGS = -std=c++20 -Wall -lncurses
+CXXFLAGS = -std=c++20 -Wall -Wextra -O2
+LDFLAGS = -lncurses
 
-ROOT_DIR = .
-SRC_DIR = $(ROOT_DIR)/src
-HEADERS = ./include
-BUILD = dist/compiled
-DIST = dist/build
+SRCS = $(wildcard src/*.cpp)
+OBJS = $(SRCS:src/%.cpp=dist/compiled/%.o)
+EXEC = dist/build/chunky
 
-EXEC = $(DIST)/chunky
-INSTALL_PATH = /usr/bin
+.PHONY: all clean install uninstall
 
-SRCS := $(wildcard $(SRC_DIR)/*.cpp)
-OBJS := $(patsubst $(SRC_DIR)/%.cpp, $(BUILD)/%.o, $(SRCS))
+all: $(EXEC)
 
-all: create_dirs $(EXEC)
+$(EXEC): $(OBJS) | dist/build
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 
-create_dirs:
-	mkdir -p $(BUILD) && mkdir -p $(DIST)
+dist/compiled/%.o: src/%.cpp | dist/compiled
+	$(CXX) $(CXXFLAGS) -Iinclude -c $< -o $@
+
+dist/compiled dist/build:
+	@mkdir -p $@
 
 clean:
-	rm -rf dist/
-
-$(EXEC): $(OBJS)
-	$(CXX) $(CXXFLAGS) $(OBJS) -o $(EXEC) -lncurses
-
-$(BUILD)/%.o: $(SRC_DIR)/%.cpp
-	$(CXX) $(CXXFLAGS) -I$(HEADERS) -c $< -o $@
-
-check:
-	$(CXX) $(CXXFLAGS) -I$(HEADERS) $(SRCS) -o /dev/null -lncurses
-	@echo "Check complete: No errors found."
-
-dist: create_dirs
-	tar -czvf $(DIST)/linux.tar.gz $(SRC_DIR) $(HEADERS) Makefile
-
-distcheck: dist
-	@mkdir -p /tmp/nrpm_distcheck
-	@tar -xzf $(DIST)/linux.tar.gz -C /tmp/nrpm_distcheck
-	@cd /tmp/nrpm_distcheck && $(MAKE) && $(MAKE) check
-	@rm -rf /tmp/nrpm_distcheck
-	@echo "Distcheck complete: Distribution builds and passes check successfully."
+	@rm -rf dist/
 
 install: $(EXEC)
-	install -m 755 $(EXEC) $(INSTALL_PATH)
+	@install -m 755 $(EXEC) /usr/bin/chunky
 
 uninstall:
-	rm -f $(INSTALL_PATH)/chunky
-
-nixinstall:
-	nix-build
-	nix profile install ./result 
-	@echo "successfully installed chunky"
-
-nixclean:
-	rm result 
-
-reset:
-	$(MAKE) clean
-	$(MAKE)
-
-.PHONY: all create_dirs clean check dist distcheck install uninstall nixinstall
-
+	@rm -f /usr/bin/chunky
