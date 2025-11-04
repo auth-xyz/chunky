@@ -1,71 +1,147 @@
------
-
 <p align="center">
-	<img width="350" src="https://github.com/auth-xyz/assets/blob/main/logos/chunky.png?raw=true" alt="chunky logo">
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=JetBrains+Mono&weight=800&pause=1000&color=FFFFFF&background=0A0A25&center=true&vCenter=true&width=330&lines=chunky)](https://git.io/typing-svg)
+<br/>
+<img src="https://img.shields.io/badge/LANGUAGE-C-5E81AC?style=for-the-badge&labelColor=2E3440&color=5E81AC"/>
+<img src="https://img.shields.io/badge/LIBRARY-NCURSES-5E81AC?style=for-the-badge&labelColor=2E3440&color=5E81AC"/>
+<img src="https://img.shields.io/badge/LICENSE-MIT-5E81AC?style=for-the-badge&labelColor=2E3440&color=5E81AC"/>
 </p>
 
------
+---
 
-### chunky
-**NOTE: THIS PROJECT HAS NOTHING TO DO WITH [Chunky](https://github.com/chunky-dev/chunky)**
+> [!NOTE]
+> **This project has nothing to do with [Chunky (the rendering tool)](https://github.com/chunky-dev/chunky)**
 
-**chunky** is a tool I wrote to assist a friend on an issue he was having, we both needed a way to read giant log files in a way that wouldn't lag the whole computer or crash it for that case. So I wrote chunky.
+---
 
+## Overview
 
------
+**Chunky** is a terminal-based file viewer designed for navigating massive log files without freezing your system.  
+It breaks files into manageable chunks and provides an interactive interface for efficient browsing, searching, and navigation.
 
-- `What is chunky?`:
-	chunky is, in basic terms, a `cat`, a way to output a file in the console, but it divides the files in chunks and outputs those chunks for the user, decreasing the load to the CPU and the Memory.
+---
 
-- `How is it useful?`:
-	It depends on your usecase, if you're just trying to output files, `chunky` isn't your tool. It's made to be used with large files, so it's pretty much useless with small files.
+## Why Chunky?
 
-- `What are chunks?`:
-    Chunks, as its definition states, is a "substatial amount" of what? Lines. The default is `1000` lines per chunk, but you can change that with the `--size` argument as shown in the usage.
+| Problem | Solution |
+| ------- | -------- |
+| Opening giant log files crashes your editor | Chunky loads files in chunks, keeping memory usage minimal |
+| Can't navigate large outputs effectively | Interactive navigation with search, jump-to-line, and regex support |
+| Need to process stdin streams | Full stdin support with piping |
 
-- `Why?`:
-    why not?
+---
 
-----
+## Features
 
-### Setting up
+- **📦 Chunked Loading** — Process files in configurable line chunks (default: 1000 lines)
+- **🔍 Regex Search** — Find patterns across your entire file
+- **⚡ Lightweight** — Minimal CPU and memory footprint
+- **⌨️ Vi-style Navigation** — Familiar keybindings for power users
+- **📊 Stdin Support** — Works seamlessly with pipes and command output
 
-The basic setup, is first installing `ncurses` on your machine, I'll let you do the searching for that.
+---
 
-
-```bash
-$ git clone https://github.com/auth-xyz/chunky
-$ cd chunky/
-$ make && make install 
+## Structure
+```
+.
+├── src/           # Source code
+├── Makefile       # Build configuration
+└── README.md      # This file
 ```
 
-----
+---
 
-### Usage 
+## Installation
 
-So, for moving in the chunky interface:tm:, you use the arrow keys in your keyboard. Up and Down for, you guessed it, moving up and down, while the left and right keys are for changing chunks. (PageUp and PageDown also work.)
-For using chunky itself, heres how:
+### Dependencies
 
-
+Install **ncurses** for your platform:
 ```bash
-chunky --file path/to/file # default chunk size is 1000 lines
-chunky -f file.txt -s / --size 100 # changes the chunk size to 100 
+# Arch Linux
+sudo pacman -S ncurses
 
-Flags:
-  --help, -h    : Display this help message (default: false)
+# Ubuntu/Debian
+sudo apt install libncurses-dev
 
-Arguments:
-  --size, -s    : chunk size (optional)
-  --file, -f    : file (required)
+# Fedora
+sudo dnf install ncurses-devel
 
+# macOS
+brew install ncurses
 ```
 
-----
+### Build & Install
+```bash
+git clone https://github.com/auth-xyz/chunky.git
+cd chunky/
+make && sudo make install
+```
 
-### Contributing
+---
 
-If you think my code is shit, it's because it most likely is, and if you have any advice for me on how to improve my code, please reach out on discord <actually.auth>, or create an issue on this repo.
+## Usage
+```
+Usage: chunky [OPTIONS]
 
+Options:
+  -f, --file FILE       Read from file instead of stdin
+  -c, --chunk-size N    Lines per chunk (default: 1000)
+  -h, --help            Show this help message
 
+Controls:
+  q          Quit
+  ← →        Previous/Next chunk
+  ↑ ↓ j k    Scroll up/down
+  PgUp/PgDn  Page up/down
+  Space/b    Page down/up
+  /          Search (regex)
+  n          Find next match
+  ?          Jump to chunk number
+  g          Go to line number
+```
 
-[logo]: https://github.com/auth-xyz/assets/blob/main/logos/chunky.png?raw=true
+---
+
+## Examples
+
+**View a large file:**
+```bash
+chunky --file /var/log/syslog
+chunky -f application.log -c 500
+```
+
+**Pipe command output:**
+```bash
+cat largefile.txt | chunky
+journalctl | chunky
+docker logs container_name | chunky
+```
+
+**Search within a log:**
+```bash
+chunky -f debug.log
+# Press '/' and enter your regex pattern
+# Press 'n' to jump to next match
+```
+
+---
+
+## Contributing
+
+Found a bug? Have a feature request? Want to improve the code?
+
+- **Discord:** `@actually.auth`
+- **Issues:** [Open an issue](https://github.com/auth-xyz/chunky/issues)
+- **Pull Requests:** Always welcome
+
+---
+
+## License
+
+Licensed under the **MIT License**.  
+You are free to use, modify, and redistribute this software.
+
+---
+
+<p align="center">
+<sub>Built with ☕ for dealing with massive log files</sub>
+</p>
