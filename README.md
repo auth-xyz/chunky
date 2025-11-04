@@ -1,9 +1,11 @@
 <p align="center">
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=JetBrains+Mono&weight=800&pause=1000&color=FFFFFF&background=0A0A25&center=true&vCenter=true&width=330&lines=chunky)](https://git.io/typing-svg)
+<a href="https://git.io/typing-svg">
+<img src="https://readme-typing-svg.herokuapp.com?font=JetBrains+Mono&weight=800&pause=1000&color=FFFFFF&background=0A0A25&center=true&vCenter=true&width=330&lines=chunky" alt="Typing SVG" />
+</a>
 <br/>
-<img src="https://img.shields.io/badge/LANGUAGE-C-5E81AC?style=for-the-badge&labelColor=2E3440&color=5E81AC"/>
-<img src="https://img.shields.io/badge/LIBRARY-NCURSES-5E81AC?style=for-the-badge&labelColor=2E3440&color=5E81AC"/>
-<img src="https://img.shields.io/badge/LICENSE-MIT-5E81AC?style=for-the-badge&labelColor=2E3440&color=5E81AC"/>
+<img src="https://img.shields.io/badge/LANGUAGE-C-88C0D0?style=for-the-badge&labelColor=0A0A25&color=88C0D0"/>
+<img src="https://img.shields.io/badge/LIBRARY-NCURSES-88C0D0?style=for-the-badge&labelColor=0A0A25&color=88C0D0"/>
+<img src="https://img.shields.io/badge/LICENSE-MIT-88C0D0?style=for-the-badge&labelColor=0A0A25&color=88C0D0"/>
 </p>
 
 ---
