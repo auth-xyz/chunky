@@ -12,6 +12,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include "config.hpp"
 
 // Abstract input source interface
 class InputSource {
@@ -148,19 +149,58 @@ class Display {
 private:
     int maxY, maxX;
     std::string searchPattern;
+    Config& config;
     
     void initNcurses() {
         initscr();
         start_color();
-        init_pair(1, COLOR_BLACK, COLOR_YELLOW);
+        
+        // Color pairs for indentation levels
+        init_pair(1, COLOR_BLACK, COLOR_YELLOW);     // Search highlight
+        init_pair(2, COLOR_WHITE, COLOR_BLACK);      // Base level (brightest)
+        init_pair(3, COLOR_CYAN, COLOR_BLACK);       // 1st indent
+        init_pair(4, COLOR_GREEN, COLOR_BLACK);      // 2nd indent
+        init_pair(5, COLOR_BLUE, COLOR_BLACK);       // 3rd+ indent
+        
         cbreak();
         noecho();
         keypad(stdscr, TRUE);
+        nodelay(stdscr, FALSE);  // Blocking mode by default
         clear();
     }
 
+    size_t getIndentLevel(const std::string& text) {
+        size_t spaces = 0;
+        size_t tabs = 0;
+        
+        for (char c : text) {
+            if (c == ' ') spaces++;
+            else if (c == '\t') tabs++;
+            else break;
+        }
+        
+        // Treat tab as 4 spaces
+        size_t totalIndent = spaces + (tabs * 4);
+        
+        // Convert to indent level (every 4 spaces = 1 level)
+        return totalIndent / 4;
+    }
+
+    int getColorPairForIndent(size_t indentLevel) {
+        if (!config.colors.enableIndentColors) {
+            return 0;
+        }
+        
+        switch (indentLevel) {
+            case 0: return config.colors.baseColorPair;
+            case 1: return config.colors.indent1ColorPair;
+            case 2: return config.colors.indent2ColorPair;
+            default: return config.colors.indent3ColorPair;
+        }
+    }
+
 public:
-    Display() {
+    Display(Config& cfg) : config(cfg) {
         initNcurses();
         getmaxyx(stdscr, maxY, maxX);
     }
@@ -180,6 +220,10 @@ public:
         searchPattern = pattern;
     }
 
+    void clearSearchPattern() {
+        searchPattern.clear();
+    }
+
     const std::string& getSearchPattern() const {
         return searchPattern;
     }
@@ -195,12 +239,34 @@ public:
     void drawLine(int y, const std::string& text, bool highlight = false) {
         if (y >= maxY) return;
 
-        if (!highlight || searchPattern.empty()) {
-            mvprintw(y, 0, "%s", text.c_str());
+        size_t indentLevel = getIndentLevel(text);
+        int colorPair = getColorPairForIndent(indentLevel);
+
+        // Handle line wrapping
+        if (config.wrapLines && text.length() > static_cast<size_t>(maxX)) {
+            std::string wrapped = text.substr(0, maxX - 1);
+            
+            if (highlight && !searchPattern.empty()) {
+                drawLineWithHighlight(y, wrapped, colorPair);
+            } else {
+                if (colorPair > 0) attron(COLOR_PAIR(colorPair));
+                mvprintw(y, 0, "%s", wrapped.c_str());
+                if (colorPair > 0) attroff(COLOR_PAIR(colorPair));
+            }
             return;
         }
 
-        // Highlight matches
+        if (!highlight || searchPattern.empty()) {
+            if (colorPair > 0) attron(COLOR_PAIR(colorPair));
+            mvprintw(y, 0, "%s", text.c_str());
+            if (colorPair > 0) attroff(COLOR_PAIR(colorPair));
+            return;
+        }
+
+        drawLineWithHighlight(y, text, colorPair);
+    }
+
+    void drawLineWithHighlight(int y, const std::string& text, int colorPair) {
         try {
             std::regex pattern(searchPattern, std::regex::icase);
             auto searchStart = text.cbegin();
@@ -211,13 +277,15 @@ public:
             while (std::regex_search(searchStart, searchEnd, match, pattern)) {
                 // Print text before match
                 std::string before(searchStart, searchStart + match.position());
+                if (colorPair > 0) attron(COLOR_PAIR(colorPair));
                 mvprintw(y, x, "%s", before.c_str());
+                if (colorPair > 0) attroff(COLOR_PAIR(colorPair));
                 x += before.length();
 
                 // Print match with highlight
-                attron(COLOR_PAIR(1));
+                attron(COLOR_PAIR(config.colors.highlightColorPair));
                 mvprintw(y, x, "%s", match.str().c_str());
-                attroff(COLOR_PAIR(1));
+                attroff(COLOR_PAIR(config.colors.highlightColorPair));
                 x += match.length();
 
                 searchStart += match.position() + match.length();
@@ -225,9 +293,13 @@ public:
 
             // Print remaining text
             std::string remaining(searchStart, searchEnd);
+            if (colorPair > 0) attron(COLOR_PAIR(colorPair));
             mvprintw(y, x, "%s", remaining.c_str());
+            if (colorPair > 0) attroff(COLOR_PAIR(colorPair));
         } catch (const std::regex_error&) {
+            if (colorPair > 0) attron(COLOR_PAIR(colorPair));
             mvprintw(y, 0, "%s", text.c_str());
+            if (colorPair > 0) attroff(COLOR_PAIR(colorPair));
         }
     }
 
@@ -251,6 +323,14 @@ public:
     int getKey() {
         return getch();
     }
+
+    // Non-blocking key check
+    int getKeyNoWait() {
+        nodelay(stdscr, TRUE);
+        int ch = getch();
+        nodelay(stdscr, FALSE);
+        return ch;
+    }
 };
 
 // Main viewer class
@@ -258,10 +338,12 @@ class ChunkyViewer {
 private:
     std::unique_ptr<InputSource> input;
     Display display;
+    Config& config;
     size_t linesPerChunk;
     size_t currentChunkStart;
     size_t scrollOffset;
     std::vector<std::string> currentChunk;
+    static constexpr size_t MAX_SEARCH_LINES = 100000; // Limit search to 100k lines
 
     void loadChunk(size_t startLine) {
         currentChunk.clear();
@@ -300,13 +382,22 @@ private:
 
         // Status line
         std::ostringstream status;
-        status << "q:quit  ←→:chunk  ↑↓:scroll  PgUp/PgDn:page  /:search  n:next  ?:jump  g:goto";
+        if (!display.getSearchPattern().empty()) {
+            status << "SEARCH: " << display.getSearchPattern() << " | ESC:clear | n:next | q:quit";
+        } else {
+            status << "q:quit  ←→:chunk  ↑↓:scroll  PgUp/PgDn:page  /:search  g:goto  ?:jump";
+        }
         display.drawStatus(status.str());
 
         display.refresh();
     }
 
     void scrollDown() {
+        if (!config.allowScrolling) {
+            nextChunk();
+            return;
+        }
+        
         int screenLines = display.getMaxY() - 2;
         if (scrollOffset + screenLines < currentChunk.size()) {
             scrollOffset++;
@@ -316,6 +407,11 @@ private:
     }
 
     void scrollUp() {
+        if (!config.allowScrolling) {
+            prevChunk();
+            return;
+        }
+        
         if (scrollOffset > 0) {
             scrollOffset--;
         } else if (currentChunkStart > 0) {
@@ -386,14 +482,29 @@ private:
                 }
             }
 
-            // Search in subsequent chunks
+            // Search in subsequent chunks with a limit
             size_t searchStart = currentChunkStart + currentChunk.size();
+            size_t linesSearched = 0;
             std::string line;
             
             input->seekToLine(searchStart);
             size_t lineOffset = 0;
             
-            while (input->getLine(line)) {
+            display.drawStatus("Searching... (ESC to cancel)");
+            display.refresh();
+            
+            while (input->getLine(line) && linesSearched < MAX_SEARCH_LINES) {
+                // Check for ESC key every 100 lines to allow cancellation
+                if (linesSearched % 100 == 0) {
+                    int ch = display.getKeyNoWait();
+                    if (ch == 27) { // ESC key
+                        display.drawStatus("Search cancelled. Press any key.");
+                        display.refresh();
+                        display.getKey();
+                        return;
+                    }
+                }
+                
                 if (std::regex_search(line, pattern)) {
                     loadChunk(searchStart);
                     scrollOffset = lineOffset;
@@ -401,13 +512,19 @@ private:
                 }
                 
                 lineOffset++;
+                linesSearched++;
+                
                 if (lineOffset >= linesPerChunk) {
                     searchStart += linesPerChunk;
                     lineOffset = 0;
                 }
             }
 
-            display.drawStatus("Pattern not found. Press any key.");
+            if (linesSearched >= MAX_SEARCH_LINES) {
+                display.drawStatus("Search limit reached (100k lines). Pattern not found. Press any key.");
+            } else {
+                display.drawStatus("Pattern not found. Press any key.");
+            }
             display.refresh();
             display.getKey();
         } catch (const std::regex_error& e) {
@@ -455,10 +572,14 @@ private:
         return SIZE_MAX; // Unknown for stdin
     }
 
+    bool matchesKey(int ch, int key) {
+        return ch == key;
+    }
+
 public:
-    ChunkyViewer(std::unique_ptr<InputSource> src, size_t lines = 1000)
-        : input(std::move(src)), linesPerChunk(lines), 
-          currentChunkStart(0), scrollOffset(0) {}
+    ChunkyViewer(std::unique_ptr<InputSource> src, Config& cfg, size_t lines = 1000)
+        : input(std::move(src)), display(cfg), config(cfg), 
+          linesPerChunk(lines), currentChunkStart(0), scrollOffset(0) {}
 
     void run() {
         loadChunk(0);
@@ -467,47 +588,36 @@ public:
             render();
             int ch = display.getKey();
 
-            switch (ch) {
-                case 'q':
-                case 'Q':
-                    return;
-                case KEY_RIGHT:
-                    nextChunk();
-                    break;
-                case KEY_LEFT:
-                    prevChunk();
-                    break;
-                case KEY_DOWN:
-                case 'j':
-                    scrollDown();
-                    break;
-                case KEY_UP:
-                case 'k':
-                    scrollUp();
-                    break;
-                case KEY_NPAGE: // Page Down
-                case ' ':
-                    pageDown();
-                    break;
-                case KEY_PPAGE: // Page Up
-                case 'b':
-                    pageUp();
-                    break;
-                case '/':
-                    search();
-                    break;
-                case 'n':
-                    findNext();
-                    break;
-                case '?':
-                    jumpToChunk();
-                    break;
-                case 'g':
-                    gotoLine();
-                    break;
-                case KEY_RESIZE:
-                    display.updateSize();
-                    break;
+            if (matchesKey(ch, config.keys.quit) || ch == 'Q') {
+                return;
+            } else if (ch == 27) { // ESC key - clear search highlight
+                display.clearSearchPattern();
+            } else if (matchesKey(ch, config.keys.nextChunk)) {
+                nextChunk();
+            } else if (matchesKey(ch, config.keys.prevChunk)) {
+                prevChunk();
+            } else if (matchesKey(ch, config.keys.scrollDown) || 
+                       matchesKey(ch, config.keys.scrollDownAlt)) {
+                scrollDown();
+            } else if (matchesKey(ch, config.keys.scrollUp) || 
+                       matchesKey(ch, config.keys.scrollUpAlt)) {
+                scrollUp();
+            } else if (matchesKey(ch, config.keys.pageDown) || 
+                       matchesKey(ch, config.keys.pageDownAlt)) {
+                pageDown();
+            } else if (matchesKey(ch, config.keys.pageUp) || 
+                       matchesKey(ch, config.keys.pageUpAlt)) {
+                pageUp();
+            } else if (matchesKey(ch, config.keys.search)) {
+                search();
+            } else if (matchesKey(ch, config.keys.findNext)) {
+                findNext();
+            } else if (matchesKey(ch, config.keys.jumpToChunk)) {
+                jumpToChunk();
+            } else if (matchesKey(ch, config.keys.gotoLine)) {
+                gotoLine();
+            } else if (ch == KEY_RESIZE) {
+                display.updateSize();
             }
         }
     }

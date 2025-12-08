@@ -8,7 +8,14 @@ void printUsage(const char* progName) {
               << "  -f, --file FILE       Read from file instead of stdin\n"
               << "  -c, --chunk-size N    Lines per chunk (default: 1000)\n"
               << "  -h, --help            Show this help message\n"
-              << "\nControls:\n"
+              << "\nConfiguration:\n"
+              << "  Config file: ~/.config/chunky/config\n"
+              << "  First run creates default config with:\n"
+              << "    - Line wrapping toggle\n"
+              << "    - Scrolling enable/disable\n"
+              << "    - Indent-based color coding\n"
+              << "    - Customizable key bindings\n"
+              << "\nControls (default):\n"
               << "  q          Quit\n"
               << "  ← →        Previous/Next chunk\n"
               << "  ↑ ↓ j k    Scroll up/down\n"
@@ -18,6 +25,12 @@ void printUsage(const char* progName) {
               << "  n          Find next match\n"
               << "  ?          Jump to chunk number\n"
               << "  g          Go to line number\n"
+              << "\nFeatures:\n"
+              << "  - Indent-based color coding (darker for nested levels)\n"
+              << "  - Configurable line wrapping\n"
+              << "  - Optional scrolling mode\n"
+              << "  - Regex search with highlighting\n"
+              << "  - Custom key bindings via config file\n"
               << "\nExamples:\n"
               << "  cat largefile.txt | " << progName << "\n"
               << "  " << progName << " --file largefile.txt\n"
@@ -63,6 +76,8 @@ int main(int argc, char* argv[]) {
     }
 
     try {
+        Config config;
+
         std::unique_ptr<InputSource> input;
 
         if (!filename.empty()) {
@@ -75,7 +90,7 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        ChunkyViewer viewer(std::move(input), chunkSize);
+        ChunkyViewer viewer(std::move(input), config, chunkSize);
         viewer.run();
 
     } catch (const std::exception& e) {
