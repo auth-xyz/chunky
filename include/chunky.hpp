@@ -343,7 +343,6 @@ private:
     size_t currentChunkStart;
     size_t scrollOffset;
     std::vector<std::string> currentChunk;
-    static constexpr size_t MAX_SEARCH_LINES = 100000; // Limit search to 100k lines
 
     void loadChunk(size_t startLine) {
         currentChunk.clear();
@@ -482,20 +481,21 @@ private:
                 }
             }
 
-            // Search in subsequent chunks with a limit
+            // Search in subsequent chunks
             size_t searchStart = currentChunkStart + currentChunk.size();
-            size_t linesSearched = 0;
             std::string line;
             
             input->seekToLine(searchStart);
             size_t lineOffset = 0;
+            size_t linesSearched = 0;
             
             display.drawStatus("Searching... (ESC to cancel)");
             display.refresh();
             
-            while (input->getLine(line) && linesSearched < MAX_SEARCH_LINES) {
-                // Check for ESC key every 100 lines to allow cancellation
-                if (linesSearched % 100 == 0) {
+            while (input->getLine(line)) {
+                // Check for ESC key every 50 lines to allow cancellation
+                // Also yield CPU every 50 lines to prevent 100% usage
+                if (linesSearched % 50 == 0) {
                     int ch = display.getKeyNoWait();
                     if (ch == 27) { // ESC key
                         display.drawStatus("Search cancelled. Press any key.");
@@ -503,6 +503,16 @@ private:
                         display.getKey();
                         return;
                     }
+                    
+                    // Update status with progress
+                    std::ostringstream statusMsg;
+                    statusMsg << "Searching... line " << (searchStart + lineOffset) 
+                             << " (ESC to cancel)";
+                    display.drawStatus(statusMsg.str());
+                    display.refresh();
+                    
+                    // Small sleep to yield CPU - prevents 100% usage
+                    usleep(50); // 100 microseconds
                 }
                 
                 if (std::regex_search(line, pattern)) {
@@ -520,11 +530,7 @@ private:
                 }
             }
 
-            if (linesSearched >= MAX_SEARCH_LINES) {
-                display.drawStatus("Search limit reached (100k lines). Pattern not found. Press any key.");
-            } else {
-                display.drawStatus("Pattern not found. Press any key.");
-            }
+            display.drawStatus("Pattern not found. Press any key.");
             display.refresh();
             display.getKey();
         } catch (const std::regex_error& e) {
